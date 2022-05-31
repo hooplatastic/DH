@@ -97,10 +97,12 @@ exports.isTrustedProxyIp = ip => ["::1", "127.0.0.1"].includes(ip);
  *
  * Write heapdumps if that processs run out of memory.
  *
- * If you wish to enable this, you will need to install node-oom-heapdump,
- * as it is sometimes not installed by default:
+ * If you wish to enable this, you will need to install node-oom-heapdump:
  *
- *     $ npm install node-oom-heapdump
+ *     $ npm install --no-save node-oom-heapdump
+ *
+ * We don't install it by default because it's super flaky and frequently
+ * crashes the installation process.
  *
  * You might also want to signal processes to put them in debug mode, for
  * access to on-demand heapdumps.
@@ -257,6 +259,16 @@ exports.reportbattlejoins = true;
 exports.monitorminpunishments = 3;
 
 /**
+ * Turns off all time-based throttles - rename, challenges, laddering, etc.
+ */
+exports.nothrottle = false;
+
+/**
+ * Removes all ip-based alt checking.
+ */
+exports.noipchecks = false;
+
+/**
  * allow punishmentmonitor to lock users with multiple roombans.
  *	 When set to `true`, this feature will automatically lock any users with three or more
  *	 active roombans, and notify the staff room.
@@ -286,22 +298,22 @@ exports.restrictLinks = true;
   * chat modchat - default minimum group for speaking in chatrooms; changeable with /modchat
   * @type {false | string}
  */
-exports.chatmodchat = '+',
+exports.chatmodchat = '+';
 /**
  * battle modchat - default minimum group for speaking in battles; changeable with /modchat
- * @type {false | string}
+ * @type {false | AuthLevel}
  */
-exports.battlemodchat = false,
+exports.battlemodchat = false;
 /**
- * pm modchat - minimum group for PMing other users, challenging other users
- * @type {false | string}
+ * PM modchat - minimum group for sending private messages or challenges to other users
+ * @type {false | AuthLevel}
  */
-exports.pmmodchat = false,
+exports.pmmodchat = false;
 /**
  * ladder modchat - minimum group for laddering
  * @type {false | GroupSymbol}
  */
-exports.laddermodchat = false,
+exports.laddermodchat = false;
 
 /**
  * forced timer - force the timer on for all battles
@@ -309,6 +321,13 @@ exports.laddermodchat = false,
  *   This setting can also be turned on with the command /forcetimer.
  */
 exports.forcetimer = false;
+
+/**
+ * force register ELO - unregistered users cannot search for ladder battles
+ * in formats where their ELO is at or above this value.
+ * @type {false | number}
+ */
+exports.forceregisterelo = false;
 
 /**
  * backdoor - allows Pokemon Showdown system operators to provide technical
@@ -383,6 +402,16 @@ exports.inactiveuserthreshold = 1000 * 60 * 60;
 exports.autolockdown = true;
 
 /**
+ * noguestsecurity - purely for development servers: allows logging in without
+ * a signed token: simply send `/trn [USERNAME]`. This allows using PS without
+ * a login server.
+ *
+ * Logging in this way will make you considered an unregistered user and grant
+ * no authority. You cannot log into a trusted (g+/r%) user account this way.
+ */
+exports.noguestsecurity = false;
+
+/**
  * Custom avatars.
  * This allows you to specify custom avatar images for users on your server.
  * Place custom avatar files under the /config/avatars/ directory.
@@ -449,6 +478,11 @@ exports.forcedpublicprefixes = [];
  */
 exports.startuphook = function () {};
 
+/**
+ * lastfmkey - the API key to let users use the last.fm commands from The Studio's
+ * chat plugin.
+ */
+exports.lastfmkey = '';
 
 /**
  * chatlogreader - the search method used for searching chatlogs.
@@ -487,7 +521,8 @@ exports.chatlogreader = 'fs';
  *     - makeroom: Create/delete chatrooms, and set modjoin/roomdesc/privacy
  *     - editroom: Editing properties of rooms
  *     - editprivacy: Set modjoin/privacy only for battles
- *     - ban: Banning and unbanning.
+ *     - globalban: Banning and unbanning from the entire server.
+ *     - ban: Banning and unbanning in rooms.
  *     - mute: Muting and unmuting.
  *     - lock: locking (ipmute) and unlocking.
  *     - receivemutedpms: Receive PMs from muted users.
@@ -495,7 +530,8 @@ exports.chatlogreader = 'fs';
  *     - ip: IP checking.
  *     - alts: Alt checking.
  *     - modlog: view the moderator logs.
- *     - broadcast: Broadcast informational commands.
+ *     - show: Show command output to other users.
+ *     - showmedia: Show images and videos to other users.
  *     - declare: /declare command.
  *     - announce: /announce command.
  *     - modchat: Set modchat.
@@ -508,41 +544,35 @@ exports.chatlogreader = 'fs';
  *     - minigame: make minigames (hangman, polls, etc.).
  *     - game: make games.
  */
-exports.noipchecks = true;
-
-exports.serverid = 'dragonheaven';
-exports.servertoken = '2IVOToXlnPb4';
-
 exports.grouplist = [
 	{
-		symbol: '~',
+		symbol: '&',
 		id: "admin",
 		name: "Administrator",
-		root: true,
-		globalonly: true,
-	},
-	{
-		symbol: '&',
-		id: "leader",
-		name: "Leader",
 		inherit: '@',
 		jurisdiction: 'u',
-		promote: 'u',
+		globalonly: true,
+
+		console: true,
+		bypassall: true,
+		lockdown: true,
+		promote: '&u',
 		roomowner: true,
 		roombot: true,
 		roommod: true,
 		roomdriver: true,
 		forcewin: true,
 		declare: true,
+		addhtml: true,
 		rangeban: true,
 		makeroom: true,
 		editroom: true,
+		editprivacy: true,
 		potd: true,
 		disableladder: true,
-		globalonly: true,
+		gdeclare: true,
 		gamemanagement: true,
 		exportinputlog: true,
-		editprivacy: true,
 	},
 	{
 		symbol: '#',
@@ -550,14 +580,17 @@ exports.grouplist = [
 		name: "Room Owner",
 		inherit: '@',
 		jurisdiction: 'u',
+		roomonly: true,
+
 		roombot: true,
 		roommod: true,
 		roomdriver: true,
+		roomprizewinner: true,
 		editroom: true,
 		declare: true,
 		addhtml: true,
-		roomonly: true,
 		gamemanagement: true,
+		tournaments: true,
 	},
 	{
 		symbol: '\u2605',
@@ -565,22 +598,13 @@ exports.grouplist = [
 		name: "Host",
 		inherit: '@',
 		jurisdiction: 'u',
-		declare: true,
-		addhtml: true,
-		modchat: true,
 		roomonly: true,
-		gamemanagement: true,
-		joinbattle: true,
-	},
-	{
-		symbol: '*',
-		id: "bot",
-		name: "Bot",
-		inherit: '@',
-		jurisdiction: 'u',
+
 		declare: true,
-		addhtml: true,
-		bypassafktimer: true,
+		modchat: 'a',
+		gamemanagement: true,
+		tournaments: true,
+		joinbattle: true,
 	},
 	{
 		symbol: '@',
@@ -588,13 +612,15 @@ exports.grouplist = [
 		name: "Moderator",
 		inherit: '%',
 		jurisdiction: 'u',
+
+		globalban: true,
 		ban: true,
-		modchatall: true,
+		modchat: 'a',
 		roomvoice: true,
+		roomwhitelist: true,
 		forcerename: true,
 		ip: true,
 		alts: '@u',
-		tournaments: true,
 		game: true,
 	},
 	{
@@ -603,10 +629,12 @@ exports.grouplist = [
 		name: "Driver",
 		inherit: '+',
 		jurisdiction: 'u',
+		globalGroupInPersonalRoom: '@',
+
 		announce: true,
-		warn: '\u2606u',
+		warn: '\u2605u',
 		kick: true,
-		mute: '\u2606u',
+		mute: '\u2605u',
 		lock: true,
 		forcerename: true,
 		timer: true,
@@ -619,29 +647,65 @@ exports.grouplist = [
 		joinbattle: true,
 		minigame: true,
 		modchat: true,
+		hiderank: true,
+	},
+	{
+		// Bots are ranked below Driver/Mod so that Global Bots can be kept out
+		// of modjoin % rooms (namely, Staff).
+		// (They were previously above Driver/Mod so they can have game management
+		// permissions drivers don't, but these permissions can be manually given.)
+		symbol: '*',
+		id: "bot",
+		name: "Bot",
+		inherit: '%',
+		jurisdiction: 'u',
+
+		addhtml: true,
+		tournaments: true,
+		declare: true,
+		bypassafktimer: true,
+		gamemanagement: true,
+		broadcast: true,
+		ip: false,
+		globalban: false,
+		lock: false,
+		forcerename: false,
+		alts: false,
 	},
 	{
 		symbol: '\u2606',
 		id: "player",
 		name: "Player",
 		inherit: '+',
+		battleonly: true,
+		broadcast: true,
 		roomvoice: true,
 		modchat: true,
-		roomonly: true,
+		editprivacy: true,
+		gamemanagement: true,
 		joinbattle: true,
 		nooverride: true,
-		editprivacy: true,
-		exportinputlog: true,
 	},
 	{
 		symbol: '+',
 		id: "voice",
 		name: "Voice",
 		inherit: ' ',
-		alts: 'ipself',
 		broadcast: true,
+		roomvoice: true,
+		altsself: true,
+		makegroupchat: true,
+		joinbattle: true,
+		show: true,
 		showmedia: true,
-		tournaments: true,
+		exportinputlog: true,
+		importinputlog: true,
+	},
+	{
+		symbol: '^',
+		id: "prizewinner",
+		name: "Prize Winner",
+		roomonly: true,
 	},
 	{
 		symbol: 'whitelist',
@@ -649,13 +713,15 @@ exports.grouplist = [
 		name: "Whitelist",
 		inherit: ' ',
 		roomonly: true,
-		alts: 'ipself',
-		broadcast: true,
-		importinputlog: true,
+		altsself: true,
+		show: true,
 		showmedia: true,
+		exportinputlog: true,
+		importinputlog: true,
 	},
 	{
 		symbol: ' ',
+		ipself: true,
 	},
 	{
 		name: 'Locked',
